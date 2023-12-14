@@ -34,7 +34,8 @@ const conf = {
     timezone: '+00:00'
 }
 
-/**
+/**INVENTORY OSIO ON ARVIOITAVAA OSAA
+ * 
  * Lisää uusi tuote varastoon
  */
 app.post('/inventory', async (req, res) => {
@@ -43,45 +44,61 @@ app.post('/inventory', async (req, res) => {
     try {
         const connection = await mysql.createConnection(conf);
 
-        // Tarkista onko tuote jo varastossa
-        const [existingInventory] = await connection.execute('SELECT * FROM inventory WHERE product_id = ?',[productId]);
+        // Tarkista, onko tuote jo olemassa varastossa
+        const [existingInventory] = await connection.execute('SELECT * FROM inventory WHERE product_id = ?', [productId]);
 
         if (existingInventory.length > 0) {
             // Jos tuote on jo varastossa, päivitä määrää
-            await connection.execute('UPDATE inventory SET quantity = quantity + ? WHERE product_id = ?',[quantity, productId]);
+            await connection.execute('UPDATE inventory SET quantity = quantity + ? WHERE product_id = ?', [quantity, productId]);
         } else {
             // Jos tuote ei ole vielä varastossa, lisää uusi rivi
-            await connection.execute('INSERT INTO inventory (product_id, quantity) VALUES (?, ?)',[productId, quantity]);
+            await connection.execute('INSERT INTO inventory (product_id, quantity) VALUES (?, ?)', [productId, quantity]);
         }
+
+        // Sulje tietokantayhteys
+        await connection.end();
 
         res.status(200).send("Inventory updated!");
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-/**
- * Hae varaston tila tietylle tuotteelle
- */
-app.get('/inventory/:productId', async (req, res) => {
-    const productId = req.params.productId;
 
+
+// Hae tuotteen varasto saldo
+app.get('/inventory/:productId', async (req, res) => {
     try {
+        // Luodaan tietokantayhteys
         const connection = await mysql.createConnection(conf);
 
-        const [inventory] = await connection.execute('SELECT * FROM inventory WHERE product_id = ?',[productId]);
-        // Tarkistetaan, onko tuote varastossa
+        // Haetaan productId pyynnöstä ja varmistetaan, että se on numero
+        const productId = parseInt(req.params.productId);
+
+        // Tarkistetaan, onko productId kelvollinen numero
+        if (isNaN(productId)) {
+            return res.status(400).send("Bad Request: Invalid productId");
+        }
+
+        // Suoritetaan SQL-kysely
+        const [inventory] = await connection.execute("SELECT quantity FROM inventory WHERE product_id=?", [productId]);
+
+        // Tarkistetaan, onko tuotteen varastosaldoa saatavilla
         if (inventory.length > 0) {
-            res.json({ productId, quantity: inventory[0].quantity });
+            // Jos varastosaldoa löytyy, palautetaan JSON-muotoinen vastaus
+            return res.json({ quantity: inventory[0].quantity });
         } else {
-            res.status(404).send("Product not found in inventory");
+            // Jos tuotetta ei löydy varastosta, palautetaan virheilmoitus
+            return res.status(404).send("Product not found in inventory");
         }
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        // Jos tapahtuu virhe, palautetaan virheilmoitus
+        return res.status(500).json({ error: err.message });
     }
 });
 
-/**
+/**ARVIOITAVA OSA LOPPUU TÄHÄN
 
 /**
  * Gets the products
